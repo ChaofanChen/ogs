@@ -39,7 +39,7 @@ std::unique_ptr<Process> createWellboreSimulatorProcess(
     std::map<int, std::unique_ptr<MaterialPropertyLib::Medium>> const& media)
 {
     //! \ogs_file_param{prj__processes__process__type}
-    config.checkConfigParameter("type", "WellboreSimulator");
+    config.checkConfigParameter("type", "WELLBORE_SIMULATOR");
 
     DBUG("Create WellboreSimulatorProcess.");
 
@@ -61,20 +61,10 @@ std::unique_ptr<Process> createWellboreSimulatorProcess(
         auto per_process_variables = findProcessVariables(
             variables, pv_config,
             {//! \ogs_file_param_special{prj__processes__process__HT__process_variables__temperature}
-             "temperature",
+             "pressure",
              //! \ogs_file_param_special{prj__processes__process__HT__process_variables__pressure}
-             "pressure"});
+             "enthalpy"});
         process_variables.push_back(std::move(per_process_variables));
-    }
-    else  // staggered scheme.
-    {
-        using namespace std::string_literals;
-        for (auto const& variable_name : {"temperature"s, "pressure"s})
-        {
-            auto per_process_variables =
-                findProcessVariables(variables, pv_config, {variable_name});
-            process_variables.push_back(std::move(per_process_variables));
-        }
     }
     // Process IDs, which are set according to the appearance order of the
     // process variables.
