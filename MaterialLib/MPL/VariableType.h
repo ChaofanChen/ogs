@@ -48,6 +48,7 @@ enum class Variable : int
     capillary_pressure,
     density,
     temperature,
+    enthalpy,
     liquid_saturation,
     liquid_saturation_rate,
     porosity,

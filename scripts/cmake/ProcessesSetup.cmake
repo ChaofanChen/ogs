@@ -21,7 +21,8 @@ set(ProcessesList
     ThermoMechanicalPhaseField
     ThermoMechanics
     TwoPhaseFlowWithPP
-    TwoPhaseFlowWithPrho)
+    TwoPhaseFlowWithPrho
+    WellboreSimulator)
 
 # Add a cmake option for each process.
 foreach(process ${ProcessesList})

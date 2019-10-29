@@ -1,6 +1,6 @@
 /**
  * \copyright
- * Copyright (c) 2012-2019, OpenGeoSys Community (http://www.opengeosys.org)
+ * Copyright (c) 2012-2020, OpenGeoSys Community (http://www.opengeosys.org)
  *            Distributed under a Modified BSD License.
  *              See accompanying file LICENSE.txt or
  *              http://www.opengeosys.org/project/license
@@ -18,8 +18,6 @@
 
 namespace ProcessLib
 {
-struct CoupledSolutionsForStaggeredScheme;
-
 namespace WellboreSimulator
 {
 template <typename NodalRowVectorType, typename GlobalDimNodalMatrixType>
@@ -47,35 +45,6 @@ class WellboreSimulatorLocalAssemblerInterface
 {
 public:
     WellboreSimulatorLocalAssemblerInterface() = default;
-    void setStaggeredCoupledSolutions(
-        std::size_t const /*mesh_item_id*/,
-        CoupledSolutionsForStaggeredScheme* const coupling_term)
-    {
-        _coupled_solutions = coupling_term;
-    }
-
-    virtual std::vector<double> const& getIntPtDarcyVelocity(
-        const double /*t*/,
-        GlobalVector const& /*current_solution*/,
-        NumLib::LocalToGlobalIndexMap const& /*dof_table*/,
-        std::vector<double>& /*cache*/) const = 0;
-
-    Eigen::Vector3d getFlux(MathLib::Point3d const& pnt_local_coords,
-                            double const t,
-                            std::vector<double> const& local_x) const override =
-        0;
-
-protected:
-    // TODO: remove _coupled_solutions or move integration point data from
-    // local assembler class to a new class to make local assembler unique
-    // for each process.
-    /** Pointer to CoupledSolutionsForStaggeredScheme that is set in a
-     * member of Process class,
-     * setCoupledTermForTheStaggeredSchemeToLocalAssemblers. It is used for
-     * calculate the secondary variables like velocity for coupled
-     * processes.
-     */
-    CoupledSolutionsForStaggeredScheme* _coupled_solutions{nullptr};
 };
 
 }  // namespace WellboreSimulator

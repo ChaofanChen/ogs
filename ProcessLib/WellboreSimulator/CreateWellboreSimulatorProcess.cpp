@@ -1,7 +1,7 @@
 /**
  * \file
  * \copyright
- * Copyright (c) 2012-2019, OpenGeoSys Community (http://www.opengeosys.org)
+ * Copyright (c) 2012-2020, OpenGeoSys Community (http://www.opengeosys.org)
  *            Distributed under a Modified BSD License.
  *              See accompanying file LICENSE.txt or
  *              http://www.opengeosys.org/project/license
@@ -15,9 +15,9 @@
 #include "ParameterLib/ConstantParameter.h"
 #include "ParameterLib/Utils.h"
 #include "ProcessLib/Output/CreateSecondaryVariables.h"
-#include "ProcessLib/SurfaceFlux/SurfaceFluxData.h"
 #include "ProcessLib/Utils/ProcessUtils.h"
 
+#include "WellboreGeometry.h"
 #include "WellboreSimulatorLocalAssemblerInterface.h"
 #include "WellboreSimulatorProcess.h"
 #include "WellboreSimulatorProcessData.h"
@@ -34,47 +34,33 @@ std::unique_ptr<Process> createWellboreSimulatorProcess(
     std::vector<std::unique_ptr<ParameterLib::ParameterBase>> const& parameters,
     unsigned const integration_order,
     BaseLib::ConfigTree const& config,
-    std::vector<std::unique_ptr<MeshLib::Mesh>> const& meshes,
-    std::string const& output_directory,
-    std::map<int, std::unique_ptr<MaterialPropertyLib::Medium>> const& media)
+    std::map<int, std::shared_ptr<MaterialPropertyLib::Medium>> const& media)
 {
     //! \ogs_file_param{prj__processes__process__type}
     config.checkConfigParameter("type", "WELLBORE_SIMULATOR");
 
     DBUG("Create WellboreSimulatorProcess.");
 
-    auto const staggered_scheme =
-        //! \ogs_file_param{prj__processes__process__HT__coupling_scheme}
-        config.getConfigParameterOptional<std::string>("coupling_scheme");
-    const bool use_monolithic_scheme =
-        !(staggered_scheme && (*staggered_scheme == "staggered"));
-
     // Process variable.
 
-    //! \ogs_file_param{prj__processes__process__HT__process_variables}
+    //! \ogs_file_param{prj__processes__process__WELLBORE_SIMULATOR__process_variables}
     auto const pv_config = config.getConfigSubtree("process_variables");
 
     std::vector<std::vector<std::reference_wrapper<ProcessVariable>>>
         process_variables;
-    if (use_monolithic_scheme)  // monolithic scheme.
-    {
-        auto per_process_variables = findProcessVariables(
-            variables, pv_config,
-            {//! \ogs_file_param_special{prj__processes__process__HT__process_variables__temperature}
-             "pressure",
-             //! \ogs_file_param_special{prj__processes__process__HT__process_variables__pressure}
-             "enthalpy"});
-        process_variables.push_back(std::move(per_process_variables));
-    }
-    // Process IDs, which are set according to the appearance order of the
-    // process variables.
-    const int _heat_transport_process_id = 0;
-    const int _hydraulic_process_id = 1;
+
+    auto per_process_variables = findProcessVariables(
+        variables, pv_config,
+        {//! \ogs_file_param_special{prj__processes__process__WELLBORE_SIMULATOR__process_variables__pressure}
+         "pressure",
+         //! \ogs_file_param_special{prj__processes__process__WELLBORE_SIMULATOR__process_variables__enthalpy}
+         "enthalpy"});
+    process_variables.push_back(std::move(per_process_variables));
 
     // Specific body force parameter.
     Eigen::VectorXd specific_body_force;
     std::vector<double> const b =
-        //! \ogs_file_param{prj__processes__process__HT__specific_body_force}
+        //! \ogs_file_param{prj__processes__process__WELLBORE_SIMULATOR__specific_body_force}
         config.getConfigParameter<std::vector<double>>("specific_body_force");
     assert(!b.empty() && b.size() < 4);
     if (b.size() < mesh.getDimension())
@@ -91,64 +77,46 @@ std::unique_ptr<Process> createWellboreSimulatorProcess(
         std::copy_n(b.data(), b.size(), specific_body_force.data());
     }
 
-    ParameterLib::ConstantParameter<double> default_solid_thermal_expansion(
-        "default solid thermal expansion", 0.);
-    ParameterLib::ConstantParameter<double> default_biot_constant(
-        "default_biot constant", 0.);
-    ParameterLib::Parameter<double>* solid_thermal_expansion =
-        &default_solid_thermal_expansion;
-    ParameterLib::Parameter<double>* biot_constant = &default_biot_constant;
+    std::vector<WellboreGeometry> wellbore_para;
 
-    auto const solid_config =
-        //! \ogs_file_param{prj__processes__process__HT__solid_thermal_expansion}
-        config.getConfigSubtreeOptional("solid_thermal_expansion");
-    const bool has_fluid_thermal_expansion = static_cast<bool>(solid_config);
-    if (solid_config)
-    {
-        solid_thermal_expansion = &ParameterLib::findParameter<double>(
-            //! \ogs_file_param_special{prj__processes__process__HT__solid_thermal_expansion__thermal_expansion}
-            *solid_config, "thermal_expansion", parameters, 1, &mesh);
-        DBUG("Use '%s' as solid thermal expansion.",
-             solid_thermal_expansion->name.c_str());
-        biot_constant = &ParameterLib::findParameter<double>(
-            //! \ogs_file_param_special{prj__processes__process__HT__solid_thermal_expansion__biot_constant}
-            *solid_config, "biot_constant", parameters, 1, &mesh);
-        DBUG("Use '%s' as Biot's constant.", biot_constant->name.c_str());
-    }
+    //! \ogs_file_param{prj__processes__process__WELLBORE_SIMULATOR__wellbore}
+    auto const& wellbore_config = config.getConfigSubtree("wellbore");
+    const auto length =
+        //! \ogs_file_param{prj__processes__process__WELLBORE_SIMULATOR__wellbore__length}
+        wellbore_config.getConfigParameter<double>("length");
+    const auto diameter =
+        //! \ogs_file_param{prj__processes__process__WELLBORE_SIMULATOR__wellbore__depth}
+        wellbore_config.getConfigParameter<double>("diameter");
+    WellboreGeometry const wellbore{length, diameter};
+    wellbore_para.push_back(wellbore);
 
-    std::unique_ptr<ProcessLib::SurfaceFluxData> surfaceflux;
-    auto calculatesurfaceflux_config =
-        //! \ogs_file_param{prj__processes__process__calculatesurfaceflux}
-        config.getConfigSubtreeOptional("calculatesurfaceflux");
-    if (calculatesurfaceflux_config)
-    {
-        surfaceflux = ProcessLib::SurfaceFluxData::createSurfaceFluxData(
-            *calculatesurfaceflux_config, meshes, output_directory);
-    }
+    std::vector<double> mass_flow_rate_data;
+
+    //! \ogs_file_param{prj__processes__process__WELLBORE_SIMULATOR__mass_flow_rate}
+    double const mass_flow_rate =
+        config.getConfigParameter<double>("mass_flow_rate");
+    mass_flow_rate_data.push_back(mass_flow_rate);
 
     auto media_map =
         MaterialPropertyLib::createMaterialSpatialDistributionMap(media, mesh);
 
-    WellboreSimulatorProcessData process_data{
-        std::move(media_map),     has_fluid_thermal_expansion,
-        *solid_thermal_expansion, *biot_constant,
-        specific_body_force,      has_gravity};
+    std::unique_ptr<WellboreSimulatorMaterialProperties> material = nullptr;
+
+    WellboreSimulatorProcessData process_data{std::move(media_map),
+                                              specific_body_force,
+                                              std::move(wellbore_para),
+                                              std::move(mass_flow_rate_data),
+                                              has_gravity,
+                                              std::move(material)};
 
     SecondaryVariableCollection secondary_variables;
 
-    NumLib::NamedFunctionCaller named_function_caller(
-        {"WellboreSimulator_temperature_pressure"});
-
-    ProcessLib::createSecondaryVariables(config, secondary_variables,
-                                         named_function_caller);
+    ProcessLib::createSecondaryVariables(config, secondary_variables);
 
     return std::make_unique<WellboreSimulatorProcess>(
         std::move(name), mesh, std::move(jacobian_assembler), parameters,
         integration_order, std::move(process_variables),
-        std::move(process_data), std::move(secondary_variables),
-        std::move(named_function_caller), use_monolithic_scheme,
-        std::move(surfaceflux), _heat_transport_process_id,
-        _hydraulic_process_id);
+        std::move(process_data), std::move(secondary_variables));
 }
 
 }  // namespace WellboreSimulator

@@ -1,7 +1,7 @@
 /**
  * \file
  * \copyright
- * Copyright (c) 2012-2019, OpenGeoSys Community (http://www.opengeosys.org)
+ * Copyright (c) 2012-2020, OpenGeoSys Community (http://www.opengeosys.org)
  *            Distributed under a Modified BSD License.
  *              See accompanying file LICENSE.txt or
  *              http://www.opengeosys.org/project/license
@@ -31,9 +31,7 @@ std::unique_ptr<Process> createWellboreSimulatorProcess(
     std::vector<std::unique_ptr<ParameterLib::ParameterBase>> const& parameters,
     unsigned const integration_order,
     BaseLib::ConfigTree const& config,
-    std::vector<std::unique_ptr<MeshLib::Mesh>> const& meshes,
-    std::string const& output_directory,
-    std::map<int, std::unique_ptr<MaterialPropertyLib::Medium>> const& media);
+    std::map<int, std::shared_ptr<MaterialPropertyLib::Medium>> const& media);
 
 }  // namespace WellboreSimulator
 }  // namespace ProcessLib

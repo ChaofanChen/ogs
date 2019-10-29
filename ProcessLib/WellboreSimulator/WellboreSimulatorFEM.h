@@ -1,7 +1,7 @@
 /**
  * \file
  * \copyright
- * Copyright (c) 2012-2019, OpenGeoSys Community (http://www.opengeosys.org)
+ * Copyright (c) 2012-2020, OpenGeoSys Community (http://www.opengeosys.org)
  *            Distributed under a Modified BSD License.
  *              See accompanying file LICENSE.txt or
  *              http://www.opengeosys.org/project/license
@@ -92,74 +92,6 @@ public:
         return Eigen::Map<const Eigen::RowVectorXd>(N.data(), N.size());
     }
 
-    /// Computes the flux in the point \c pnt_local_coords that is given in
-    /// local coordinates using the values from \c local_x.
-    Eigen::Vector3d getFlux(MathLib::Point3d const& pnt_local_coords,
-                            double const t,
-                            std::vector<double> const& local_x) const override
-    {
-        // eval dNdx and invJ at given point
-        auto const fe = NumLib::createIsoparametricFiniteElement<
-            ShapeFunction, ShapeMatricesType>(_element);
-
-        typename ShapeMatricesType::ShapeMatrices shape_matrices(
-            ShapeFunction::DIM, GlobalDim, ShapeFunction::NPOINTS);
-
-        // Note: Axial symmetry is set to false here, because we only need dNdx
-        // here, which is not affected by axial symmetry.
-        fe.computeShapeFunctions(pnt_local_coords.getCoords(), shape_matrices,
-                                 GlobalDim, false);
-
-        // fetch permeability, viscosity, density
-        ParameterLib::SpatialPosition pos;
-        pos.setElementID(this->_element.getID());
-
-        MaterialPropertyLib::VariableArray vars;
-
-        // local_x contains the local temperature and pressure values
-        double T_int_pt = 0.0;
-        double p_int_pt = 0.0;
-        NumLib::shapeFunctionInterpolate(local_x, shape_matrices.N, T_int_pt,
-                                         p_int_pt);
-
-        vars[static_cast<int>(MaterialPropertyLib::Variable::temperature)] =
-            T_int_pt;
-        vars[static_cast<int>(MaterialPropertyLib::Variable::phase_pressure)] =
-            p_int_pt;
-
-        auto const& medium =
-            *_process_data.media_map->getMedium(_element.getID());
-        auto const& liquid_phase = medium.phase("AqueousLiquid");
-
-        auto const K = MaterialPropertyLib::formEigenTensor<GlobalDim>(
-            medium.property(MaterialPropertyLib::PropertyType::permeability)
-                .value(vars, pos, t));
-
-        auto const mu =
-            liquid_phase.property(MaterialPropertyLib::PropertyType::viscosity)
-                .template value<double>(vars, pos, t);
-        GlobalDimMatrixType const K_over_mu = K / mu;
-
-        auto const p_nodal_values = Eigen::Map<const NodalVectorType>(
-            &local_x[local_x.size() / 2], ShapeFunction::NPOINTS);
-        GlobalDimVectorType q =
-            -K_over_mu * shape_matrices.dNdx * p_nodal_values;
-
-        if (this->_process_data.has_gravity)
-        {
-            auto const rho_w =
-                liquid_phase
-                    .property(MaterialPropertyLib::PropertyType::density)
-                    .template value<double>(vars, pos, t);
-            auto const b = this->_process_data.specific_body_force;
-            q += K_over_mu * rho_w * b;
-        }
-
-        Eigen::Vector3d flux;
-        flux.head<GlobalDim>() = q;
-        return flux;
-    }
-
 protected:
     MeshLib::Element const& _element;
     WellboreSimulatorProcessData const& _process_data;
@@ -171,166 +103,11 @@ protected:
             IntegrationPointData<NodalRowVectorType, GlobalDimNodalMatrixType>>>
         _ip_data;
 
-    double getHeatEnergyCoefficient(
-        MaterialPropertyLib::VariableArray const& vars, const double porosity,
-        const double fluid_density, const double specific_heat_capacity_fluid,
-        ParameterLib::SpatialPosition const& pos, double const t)
-    {
-        auto const& medium =
-            *_process_data.media_map->getMedium(this->_element.getID());
-        auto const& solid_phase = medium.phase("Solid");
-
-        auto const specific_heat_capacity_solid =
-            solid_phase
-                .property(
-                    MaterialPropertyLib::PropertyType::specific_heat_capacity)
-                .template value<double>(vars, pos, t);
-
-        auto const solid_density =
-            solid_phase.property(MaterialPropertyLib::PropertyType::density)
-                .template value<double>(vars, pos, t);
-
-        return solid_density * specific_heat_capacity_solid * (1 - porosity) +
-               fluid_density * specific_heat_capacity_fluid * porosity;
-    }
-
-    GlobalDimMatrixType getThermalConductivityDispersivity(
-        MaterialPropertyLib::VariableArray const& vars, const double porosity,
-        const double fluid_density, const double specific_heat_capacity_fluid,
-        const GlobalDimVectorType& velocity, const GlobalDimMatrixType& I,
-        ParameterLib::SpatialPosition const& pos, double const t)
-    {
-        auto const& medium =
-            *_process_data.media_map->getMedium(_element.getID());
-        auto const& solid_phase = medium.phase("Solid");
-        auto const& liquid_phase = medium.phase("AqueousLiquid");
-
-        auto const thermal_conductivity_solid =
-            solid_phase
-                .property(
-                    MaterialPropertyLib::PropertyType::thermal_conductivity)
-                .value(vars, pos, t);
-
-        auto const thermal_conductivity_fluid =
-            liquid_phase
-                .property(
-                    MaterialPropertyLib::PropertyType::thermal_conductivity)
-                .template value<double>(vars, pos, t);
-
-        auto const thermal_conductivity =
-            MaterialPropertyLib::formEffectiveThermalConductivity<GlobalDim>(
-                thermal_conductivity_solid, thermal_conductivity_fluid,
-                porosity);
-
-        auto const thermal_dispersivity_longitudinal =
-            medium
-                .property(MaterialPropertyLib::PropertyType::
-                              thermal_longitudinal_dispersivity)
-                .template value<double>();
-        auto const thermal_dispersivity_transversal =
-            medium
-                .property(MaterialPropertyLib::PropertyType::
-                              thermal_transversal_dispersivity)
-                .template value<double>();
-
-        double const velocity_magnitude = velocity.norm();
-
-        if (velocity_magnitude < std::numeric_limits<double>::epsilon())
-        {
-            return thermal_conductivity;
-        }
-
-        GlobalDimMatrixType const thermal_dispersivity =
-            fluid_density * specific_heat_capacity_fluid *
-            (thermal_dispersivity_transversal * velocity_magnitude * I +
-             (thermal_dispersivity_longitudinal -
-              thermal_dispersivity_transversal) /
-                 velocity_magnitude * velocity * velocity.transpose());
-
-        return thermal_conductivity + thermal_dispersivity;
-    }
-
-    std::vector<double> const& getIntPtDarcyVelocityLocal(
-        const double t, std::vector<double> const& local_x,
-        std::vector<double>& cache) const
-    {
-        std::vector<double> local_p{
-            local_x.data() + pressure_index,
-            local_x.data() + pressure_index + pressure_size};
-        std::vector<double> local_T{
-            local_x.data() + temperature_index,
-            local_x.data() + temperature_index + temperature_size};
-
-        auto const n_integration_points =
-            _integration_method.getNumberOfPoints();
-
-        cache.clear();
-        auto cache_mat = MathLib::createZeroedMatrix<
-            Eigen::Matrix<double, GlobalDim, Eigen::Dynamic, Eigen::RowMajor>>(
-            cache, GlobalDim, n_integration_points);
-
-        ParameterLib::SpatialPosition pos;
-        pos.setElementID(_element.getID());
-
-        MaterialPropertyLib::VariableArray vars;
-
-        auto const p_nodal_values = Eigen::Map<const NodalVectorType>(
-            &local_p[0], ShapeFunction::NPOINTS);
-
-        auto const& medium =
-            *_process_data.media_map->getMedium(_element.getID());
-        auto const& liquid_phase = medium.phase("AqueousLiquid");
-
-        for (unsigned ip = 0; ip < n_integration_points; ++ip)
-        {
-            auto const& ip_data = _ip_data[ip];
-            auto const& N = ip_data.N;
-            auto const& dNdx = ip_data.dNdx;
-
-            pos.setIntegrationPoint(ip);
-
-            double T_int_pt = 0.0;
-            double p_int_pt = 0.0;
-            NumLib::shapeFunctionInterpolate(local_p, N, p_int_pt);
-            NumLib::shapeFunctionInterpolate(local_T, N, T_int_pt);
-
-            vars[static_cast<int>(MaterialPropertyLib::Variable::temperature)] =
-                T_int_pt;
-            vars[static_cast<int>(
-                MaterialPropertyLib::Variable::phase_pressure)] = p_int_pt;
-
-            auto const K = MaterialPropertyLib::formEigenTensor<GlobalDim>(
-                medium.property(MaterialPropertyLib::PropertyType::permeability)
-                    .value(vars, pos, t));
-
-            auto const mu =
-                liquid_phase
-                    .property(MaterialPropertyLib::PropertyType::viscosity)
-                    .template value<double>(vars, pos, t);
-            GlobalDimMatrixType const K_over_mu = K / mu;
-
-            cache_mat.col(ip).noalias() = -K_over_mu * dNdx * p_nodal_values;
-
-            if (_process_data.has_gravity)
-            {
-                auto const rho_w =
-                    liquid_phase
-                        .property(MaterialPropertyLib::PropertyType::density)
-                        .template value<double>(vars, pos, t);
-                auto const b = _process_data.specific_body_force;
-                // here it is assumed that the vector b is directed 'downwards'
-                cache_mat.col(ip).noalias() += K_over_mu * rho_w * b;
-            }
-        }
-
-        return cache;
-    }
-
 protected:
-    static const int pressure_index = ShapeFunction::NPOINTS;
+    static const int pressure_index = 0;
     static const int pressure_size = ShapeFunction::NPOINTS;
-    static const int temperature_index = 0;
-    static const int temperature_size = ShapeFunction::NPOINTS;
+    static const int enthalpy_index = ShapeFunction::NPOINTS;
+    static const int enthalpy_size = ShapeFunction::NPOINTS;
 };
 
 }  // namespace WellboreSimulator
