@@ -19,7 +19,6 @@ namespace BHE
 {
 BoreholeGeometry createBoreholeGeometry(BaseLib::ConfigTree const& config)
 {
-    double borehole_length(0.0), borehole_diameter(0.0);
     std::vector<double> section_length, section_diameter;
 
     for (
@@ -38,11 +37,11 @@ BoreholeGeometry createBoreholeGeometry(BaseLib::ConfigTree const& config)
         section_diameter.push_back(borehole_diameter_this_section);
     }
 
-    borehole_diameter = section_diameter.front();
-    borehole_length = section_length.back();
+    double const borehole_diameter = section_diameter.front();
+    double const borehole_length =
+        std::accumulate(section_length.begin(), section_length.end(), 0.0);
 
-    return {borehole_length, borehole_diameter, section_length,
-            section_diameter};
+    return {borehole_length, borehole_diameter, section_diameter};
 }
 }  // namespace BHE
 }  // namespace HeatTransportBHE

@@ -11,6 +11,7 @@
 #pragma once
 
 #include <boost/math/constants/constants.hpp>
+#include <numeric>
 
 namespace BaseLib
 {
@@ -39,13 +40,8 @@ struct BoreholeGeometry
     /**
      * todo
      */
-    std::vector<double> const section_length;
-
-    /**
-     * todo
-     */
     std::vector<double> const section_diameter;
-    
+
     double area() const
     {
         constexpr double pi = boost::math::constants::pi<double>();

@@ -25,8 +25,8 @@
                             <diameter>0.25</diameter>
                         </borehole_section>
                         <borehole_section>
-                            <length>30.0</length>
-                            <diameter>0.28</diameter>
+                            <length>15.0</length>
+                            <diameter>0.23</diameter>
                         </borehole_section>
                     </borehole>
                     <grout>
