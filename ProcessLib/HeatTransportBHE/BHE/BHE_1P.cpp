@@ -91,11 +91,6 @@ BHE_1P::pipeAdvectionVectors(Eigen::Vector3d const& elem_direction) const
             {0, 0, 0}};
 }
 
-double BHE_1P::compute_R_gs(double const chi, double const R_g)
-{
-    return (1 - chi) * R_g;
-}
-
 void BHE_1P::updateHeatTransferCoefficients(double const flow_rate)
 
 {
@@ -127,22 +122,68 @@ std::array<double, BHE_1P::number_of_unknowns> BHE_1P::calcThermalResistances(
 
     // thermal resistances of the grout
     double const D = borehole_geometry.diameter;
+    std::vector<double> const& borehole_section_diameter =
+        borehole_geometry.section_diameter;
+
     double const pipe_outside_diameter = _pipe.single_pipe.outsideDiameter();
 
     double const chi = std::log(std::sqrt(D * D + pipe_outside_diameter *
                                                       pipe_outside_diameter) /
                                 std::sqrt(2) / pipe_outside_diameter) /
                        std::log(D / pipe_outside_diameter);
+
+    std::vector<double> chi_borehole_section;
+
+    std::transform(
+        borehole_section_diameter.begin(), borehole_section_diameter.end(),
+        std::back_inserter(chi_borehole_section),
+        [&pipe_outside_diameter](auto& d) {
+            return std::log(std::sqrt(d * d + pipe_outside_diameter *
+                                                  pipe_outside_diameter) /
+                            std::sqrt(2) / pipe_outside_diameter) /
+                   std::log(d / pipe_outside_diameter);
+        });
+
     double const R_g =
         std::log(D / pipe_outside_diameter) / 2 / (pi * lambda_g);
 
+    std::vector<double> R_g_borehole_section;
+
+    std::transform(
+        borehole_section_diameter.begin(), borehole_section_diameter.end(),
+        std::back_inserter(R_g_borehole_section),
+        [&pipe_outside_diameter, &pi, &lambda_g](auto& d) {
+            return std::log(d / pipe_outside_diameter) / 2 / (pi * lambda_g);
+        });
+
     double const R_con_b = chi * R_g;
 
+    std::vector<double> R_con_b_borehole_section;
+
+    std::transform(chi_borehole_section.begin(), chi_borehole_section.end(),
+                   R_g_borehole_section.begin(),
+                   std::back_inserter(R_con_b_borehole_section),
+                   std::multiplies<double>());
+
     // thermal resistances due to grout-soil exchange
-    double const R_gs = compute_R_gs(chi, R_g);
+    double const R_gs = (1 - chi) * R_g;
+
+    std::vector<double> R_gs_borehole_section;
+
+    std::transform(chi_borehole_section.begin(), chi_borehole_section.end(),
+                   R_g_borehole_section.begin(),
+                   std::back_inserter(R_gs_borehole_section),
+                   [](double& chi, double& R_g) { return (1 - chi) * R_g; });
 
     // Eq. 29 and 30
     double const R_fg = R_adv_i1 + R_con_a + R_con_b;
+    std::vector<double> R_fg_borehole_section;
+    std::transform(R_con_b_borehole_section.begin(),
+                   R_con_b_borehole_section.end(),
+                   std::back_inserter(R_fg_borehole_section),
+                   [&R_adv_i1, R_con_a](auto const& R_con_b) {
+                       return R_adv_i1 + R_con_a + R_con_b;
+                   });
 
     return {{R_fg, R_gs}};
 }
@@ -169,14 +210,13 @@ BHE_1P::getBHEBottomDirichletBCNodesAndComponents(
 
 std::array<double, BHE_1P::number_of_unknowns> BHE_1P::crossSectionAreas() const
 {
-    std::vector<double> section_diameter = borehole_geometry.section_diameter;
+    std::vector<double> const& section_diameter =
+        borehole_geometry.section_diameter;
     constexpr double pi = boost::math::constants::pi<double>();
 
     std::vector<double> borehole_areas;
-    borehole_areas.resize(section_diameter.size());
-
     std::transform(section_diameter.begin(), section_diameter.end(),
-                   borehole_areas.begin(),
+                   std::back_inserter(borehole_areas),
                    [&pi](auto& d) { return d * d * pi / 4; });
 
     return {{_pipe.single_pipe.area(),
