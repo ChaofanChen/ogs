@@ -169,6 +169,16 @@ BHE_1P::getBHEBottomDirichletBCNodesAndComponents(
 
 std::array<double, BHE_1P::number_of_unknowns> BHE_1P::crossSectionAreas() const
 {
+    std::vector<double> section_diameter = borehole_geometry.section_diameter;
+    constexpr double pi = boost::math::constants::pi<double>();
+
+    std::vector<double> borehole_areas;
+    borehole_areas.resize(section_diameter.size());
+
+    std::transform(section_diameter.begin(), section_diameter.end(),
+                   borehole_areas.begin(),
+                   [&pi](auto& d) { return d * d * pi / 4; });
+
     return {{_pipe.single_pipe.area(),
              borehole_geometry.area() - _pipe.single_pipe.outsideArea()}};
 }

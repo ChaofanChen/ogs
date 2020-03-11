@@ -40,7 +40,7 @@ struct BoreholeGeometry
     /**
      * todo
      */
-    std::vector<double> const section_diameter;
+    std::vector<double> section_diameter;
 
     double area() const
     {

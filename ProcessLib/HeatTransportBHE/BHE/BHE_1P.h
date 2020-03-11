@@ -11,6 +11,7 @@
 #pragma once
 
 #include <Eigen/Eigen>
+#include <functional>
 #include <optional>
 
 #include "BaseLib/Error.h"
