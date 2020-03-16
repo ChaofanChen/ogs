@@ -105,7 +105,7 @@ public:
     /// Return the inflow temperature for the boundary condition.
     double updateFlowRateAndTemperature(double T_out, double current_time);
 
-    double thermalResistance(int const unknown_index) const
+    std::vector<double> thermalResistance(int const unknown_index) const
     {
         return _thermal_resistances[unknown_index];
     }
@@ -137,7 +137,7 @@ protected:
     double _flow_velocity = std::numeric_limits<double>::quiet_NaN();
 
 private:
-    std::array<double, number_of_unknowns> calcThermalResistances(
+    std::array<std::vector<double>, number_of_unknowns> calcThermalResistances(
         double const Nu);
 
     double compute_R_gs(double const chi, double const R_g);
@@ -146,7 +146,7 @@ private:
     /// PHI_fg, PHI_gs;
     /// Here we store the thermal resistances needed for computation of the heat
     /// exchange coefficients in the governing equations of BHE.
-    std::array<double, number_of_unknowns> _thermal_resistances;
+    std::array<std::vector<double>, number_of_unknowns> _thermal_resistances;
 };
 }  // namespace BHE
 }  // namespace HeatTransportBHE

@@ -85,7 +85,9 @@ HeatTransportBHELocalAssemblerBHE<ShapeFunction, IntegrationMethod, BHEType>::
             auto const& N = _ip_data[ip].N;
             auto const& w = _ip_data[ip].integration_weight;
 
-            auto const& R = _bhe.thermalResistance(idx_bhe_unknowns);
+            auto const& a = _bhe.thermalResistance(idx_bhe_unknowns);
+            auto b = a;
+            auto const& R = 1;
             // calculate mass matrix for current unknown
             matBHE_loc_R += N.transpose() * N * (1 / R) * w;
         }  // end of loop over integration point

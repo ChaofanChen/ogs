@@ -31,8 +31,6 @@ BHE_1P::BHE_1P(BoreholeGeometry const& borehole,
                 use_python_bcs},
       _pipe(pipes)
 {
-    _thermal_resistances.fill(std::numeric_limits<double>::quiet_NaN());
-
     // Initialize thermal resistances.
     auto values = visit(
         [&](auto const& control) {
@@ -103,8 +101,8 @@ void BHE_1P::updateHeatTransferCoefficients(double const flow_rate)
 }
 
 // Nu is the Nusselt number.
-std::array<double, BHE_1P::number_of_unknowns> BHE_1P::calcThermalResistances(
-    double const Nu)
+std::array<std::vector<double>, BHE_1P::number_of_unknowns>
+BHE_1P::calcThermalResistances(double const Nu)
 {
     constexpr double pi = boost::math::constants::pi<double>();
 
@@ -185,7 +183,9 @@ std::array<double, BHE_1P::number_of_unknowns> BHE_1P::calcThermalResistances(
                        return R_adv_i1 + R_con_a + R_con_b;
                    });
 
-    return {{R_fg, R_gs}};
+    return {{R_fg_borehole_section, R_gs_borehole_section}};
+
+    //    return {{R_fg, R_gs}};
 }
 
 std::array<std::pair<std::size_t /*node_id*/, int /*component*/>, 2>
