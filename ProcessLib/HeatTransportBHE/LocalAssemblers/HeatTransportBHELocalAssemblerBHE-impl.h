@@ -9,7 +9,7 @@
  */
 
 #pragma once
-
+#include <type_traits>
 #include "HeatTransportBHELocalAssemblerBHE.h"
 #include "MathLib/LinAlg/Eigen/EigenMapTools.h"
 #include "ProcessLib/Utils/InitShapeMatrices.h"
@@ -86,7 +86,8 @@ HeatTransportBHELocalAssemblerBHE<ShapeFunction, IntegrationMethod, BHEType>::
             auto const& w = _ip_data[ip].integration_weight;
 
             auto const& a = _bhe.thermalResistance(idx_bhe_unknowns);
-            auto b = a;
+            auto b = std::is_floating_point<float>::value;
+
             auto const& R = 1;
             // calculate mass matrix for current unknown
             matBHE_loc_R += N.transpose() * N * (1 / R) * w;

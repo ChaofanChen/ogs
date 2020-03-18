@@ -20,8 +20,14 @@
                         <power_curve>power_curve</power_curve>
                     </flow_and_temperature_control>
                     <borehole>
-                        <length>50.0</length>
-                        <diameter>0.216</diameter>
+                        <borehole_section>
+                            <length>25.0</length>
+                            <diameter>0.216</diameter>
+                        </borehole_section>
+                        <borehole_section>
+                            <length>25.0</length>
+                            <diameter>0.216</diameter>
+                        </borehole_section>
                     </borehole>
                     <grout>
                         <density>2190.0</density>
